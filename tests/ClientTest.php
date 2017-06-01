@@ -2509,6 +2509,7 @@ organization           = "Sentry"
             ],
             'server_options' => [],
             'timeout'        => 0,
+            'is_failed'      => false,
         ];
         $block1[] = [
             'options'        => [
@@ -2516,7 +2517,8 @@ organization           = "Sentry"
                 'curl_method' => 'async',
             ],
             'server_options' => [],
-            'timeout'        => 0
+            'timeout'        => 0,
+            'is_failed'      => false,
         ];
         $block1[] = [
             'options'        => [
@@ -2525,9 +2527,18 @@ organization           = "Sentry"
             ],
             'server_options' => [],
             'timeout'        => 5,
+            'is_failed'      => false,
         ];
 
-        $block_ssl = [['options' => [], 'server_options' => [], 'timeout' => 0]];
+        $j = count($block1);
+        for ($i = 0; $i < $j; $i++) {
+            $datum = $block1[$i];
+            $datum['server_options']['http_code'] = 403;
+            $datum['is_failed'] = true;
+            $block1[] = $datum;
+        }
+
+        $block_ssl = [['options' => [], 'server_options' => [], 'timeout' => 0, 'is_failed' => false]];
         $block_ssl[] = [
             'options'        => [
                 'dsn'     => 'http://login:password@127.0.0.1:{port}/5',
@@ -2539,6 +2550,7 @@ organization           = "Sentry"
                 'is_ssl'                      => true,
             ],
             'timeout'        => 5,
+            'is_failed'      => false,
         ];
 
         foreach ($block1 as $b1) {
@@ -2553,6 +2565,7 @@ organization           = "Sentry"
                         isset($b2['server_options']) ? $b2['server_options'] : []
                     ),
                     'timeout'        => max($b1['timeout'], $b2['timeout']),
+                    'is_failed'      => ($b1['is_failed'] or $b2['is_failed']),
                 ];
                 if (isset($datum['options']['ca_cert'])) {
                     $datum['options']['dsn'] = str_replace('http://', 'https://', $datum['options']['dsn']);
@@ -2566,15 +2579,16 @@ organization           = "Sentry"
     }
 
     /**
-     * @param array   $options
+     * @param array   $sentry_options
      * @param array   $server_options
      * @param integer $timeout
+     * @param boolean $is_failed
      *
      * @dataProvider dataDirectSend
      */
-    public function testDirectSend($options, $server_options, $timeout)
+    public function testDirectSend($sentry_options, $server_options, $timeout, $is_failed)
     {
-        foreach ($options as &$value) {
+        foreach ($sentry_options as &$value) {
             if (is_string($value)) {
                 $value = str_replace('{folder}', self::$_folder, $value);
             }
@@ -2588,10 +2602,10 @@ organization           = "Sentry"
         unset($value);
 
         $port = self::get_port();
-        $options['dsn'] = str_replace('{port}', $port, $options['dsn']);
-        $options['timeout'] = 10;
+        $sentry_options['dsn'] = str_replace('{port}', $port, $sentry_options['dsn']);
+        $sentry_options['timeout'] = 10;
 
-        $client = new Client($options);
+        $client = new Client($sentry_options);
         $output_filename = tempnam(self::$_folder, 'output_http_');
         foreach (
             [
@@ -2633,7 +2647,18 @@ organization           = "Sentry"
         );
         $client->sendUnsentErrors();
         $client->force_send_async_curl_events();
-        $this->assertNotNull($event);
+        if ($is_failed) {
+            if (!isset($sentry_options['curl_method']) or
+                !in_array($sentry_options['curl_method'], ['async', 'exec'])
+            ) {
+                if (isset($server_options['http_code'])) {
+                    $this->assertNotNull($client->getLastError());
+                    $this->assertNotNull($client->getLastSentryError());
+                }
+            }
+        } else {
+            $this->assertNotNull($event);
+        }
         if ($timeout > 0) {
             usleep($timeout * 1000000);
         }

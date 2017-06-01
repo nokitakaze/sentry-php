@@ -26,8 +26,12 @@ $options->onRequest = function ($server, $connect) {
         echo "can not save content\n";
         exit(1);
     }
+    if ($server->get_option('http_code') == 403) {
+        $server->answer($connect, 403, 'Denied', json_encode(['error' => 'Denied']));
+    } else {
+        $server->answer($connect, 200, 'OK', json_encode(['event' => uniqid()]));
+    }
 
-    $server->answer($connect, 200, 'OK', json_encode(['event' => uniqid()]));
     $server->close_connection($connect);
     echo "done\n";
     exit(0);

@@ -1309,9 +1309,10 @@ class Client
 
         $errno = curl_errno($this->_curl_instance);
         // CURLE_SSL_CACERT || CURLE_SSL_CACERT_BADFILE
-        if ((($errno == 60) || ($errno == 77) || ($errno == 28)) && !is_null($ca_cert)) {
+        if (in_array($errno, [CURLE_SSL_CACERT, 77]) && !is_null($ca_cert)) {
             curl_setopt($this->_curl_instance, CURLOPT_CAINFO, $ca_cert);
             $buffer = curl_exec($this->_curl_instance);
+            $errno = curl_errno($this->_curl_instance);
         }
         if ($errno != 0) {
             $this->_lasterror = curl_error($this->_curl_instance);
